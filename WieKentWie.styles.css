@@ -1,0 +1,23 @@
+/* /Layout/MainLayout.razor.rz.scp.css */
+.page[b-0snekcz5cd] {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+main[b-0snekcz5cd] {
+    flex: 1;
+}
+/* /Pages/Home.razor.rz.scp.css */
+.main-container[b-uuhnegay54] {
+    height: 100vh;
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+    gap: 10px 10px;
+    grid-auto-flow: row;
+    justify-content: center;
+    align-content: center;
+    justify-items: center;
+    align-items: center;
+}
