@@ -1,0 +1,216 @@
+﻿@page "/"
+@using System.Text.Json
+@inject IJSRuntime JS
+
+<PageTitle>Wie kent wie?</PageTitle>
+
+<div class="main-container">
+    @if (!state.QuestionsEntered)
+    {
+        <div>
+            <h1>Voer vraag @((state.TempQuestions.Count + 1)) in:</h1>
+            <input @bind="state.CurrentAnswer" type="text" placeholder="Vraag" aria-label="Vraag" @bind:event="oninput" @onkeypress="HandleQuestionInputKeyPress">
+            <a role="button" class="w-100" @onclick="AddQuestion">Enter</a>
+            <a role="button" class="w-100 mt-2" @onclick="StartQuiz">Start</a>
+        </div>
+    }
+    else if (state.ShowDelay)
+    {
+        <div>
+            <h1>Volgende vraag over: @state.Countdown seconden...</h1>
+        </div>
+    }
+    else if (state.QuestionIndex < questions.Length)
+    {
+        <div>
+            <h1>@questions[state.QuestionIndex]</h1>
+            <input @bind="state.CurrentAnswer" type="text" name="Antwoord" placeholder="Antwoord" aria-label="Text" @bind:event="oninput" @onkeypress="HandleKeyPress">
+            <a role="button" class="w-100" @onclick="SaveAnswer">Enter</a>
+        </div>
+    }
+    else if (!state.PasswordCorrect)
+    {
+        <div>
+            <h1>Voer wachtwoord in om de resultaten te bekijken:</h1>
+            <input @bind="passwordInput" type="password" placeholder="Wachtwoord" @bind:event="oninput" @onkeypress="HandlePasswordKeyPress">
+            <a role="button" class="w-100" @onclick="CheckPassword">Verstuur</a>
+        </div>
+    }
+    else
+    {
+        <div>
+            <h1>Resultaten</h1>
+            <ul>
+                @for (int i = 0; i < questions.Length; i++)
+                {
+                    <li><strong>@questions[i]</strong>: @state.Antwoorden[i]</li>
+                }
+            </ul>
+            <a role="button" class="w-100 mt-3" @onclick="ResetState">Reset</a>
+        </div>
+    }
+</div>
+
+@code {
+    private string[]? questions;
+    private AppState state = new();
+    private string passwordInput = "";
+    private const string correctPassword = "geheim";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStateAsync();
+
+        if (state.QuestionsEntered)
+        {
+            questions = state.TempQuestions.ToArray();
+            if (state.Antwoorden == null || state.Antwoorden.Length != questions.Length)
+            {
+                state.Antwoorden = new string[questions.Length];
+            }
+
+            if (state.ShowDelay)
+            {
+                _ = ContinueCountdown();
+            }
+        }
+    }
+
+    private void AddQuestion()
+    {
+        if (!string.IsNullOrWhiteSpace(state.CurrentAnswer))
+        {
+            state.TempQuestions.Add(state.CurrentAnswer);
+            state.CurrentAnswer = "";
+            SaveStateAsync();
+        }
+    }
+
+    private void StartQuiz()
+    {
+        AddQuestion();
+        if (state.TempQuestions.Count > 0)
+        {
+            questions = state.TempQuestions.ToArray();
+            state.Antwoorden = new string[questions.Length];
+            state.QuestionsEntered = true;
+            SaveStateAsync();
+        }
+    }
+
+    private async Task SaveAnswer()
+    {
+        if (questions == null || state.Antwoorden == null)
+            return;
+
+        state.Antwoorden[state.QuestionIndex] = state.CurrentAnswer;
+        state.CurrentAnswer = "";
+
+        state.ShowDelay = true;
+        state.Countdown = 300;
+
+        await SaveStateAsync();
+        StateHasChanged();
+
+        await ContinueCountdown();
+    }
+
+    private async Task ContinueCountdown()
+    {
+        while (state.Countdown > 0)
+        {
+            await Task.Delay(1000);
+            state.Countdown--;
+            await SaveStateAsync();
+            StateHasChanged();
+        }
+
+        state.ShowDelay = false;
+        state.QuestionIndex++;
+        await SaveStateAsync();
+        StateHasChanged();
+    }
+
+    private async Task HandleKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !state.ShowDelay)
+        {
+            await SaveAnswer();
+        }
+    }
+
+    private async Task HandleQuestionInputKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            AddQuestion();
+        }
+    }
+
+    private void CheckPassword()
+    {
+        if (passwordInput == correctPassword)
+        {
+            state.PasswordCorrect = true;
+        }
+        else
+        {
+            passwordInput = "";
+        }
+        _ = SaveStateAsync();
+    }
+
+    private async Task HandlePasswordKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            CheckPassword();
+        }
+    }
+
+    private async Task SaveStateAsync()
+    {
+        await JS.InvokeVoidAsync("localStorage.setItem", "appStatev2", JsonSerializer.Serialize(state));
+    }
+
+    private async Task LoadStateAsync()
+    {
+        var json = await JS.InvokeAsync<string>("localStorage.getItem", "appStatev2");
+        if (!string.IsNullOrEmpty(json))
+        {
+            try
+            {
+                var loadedState = JsonSerializer.Deserialize<AppState>(json);
+                if (loadedState != null)
+                {
+                    state = loadedState;
+                }
+            }
+            catch
+            {
+                // Ignore broken state
+            }
+        }
+    }
+
+    private async Task ResetState()
+    {
+        await JS.InvokeVoidAsync("localStorage.removeItem", "appStatev2");
+        state = new AppState();
+        passwordInput = "";
+        questions = null;
+        StateHasChanged();
+    }
+
+    private class AppState
+    {
+        public List<string> TempQuestions { get; set; } = new();
+        public int QuestionIndex { get; set; } = 0;
+        public string[]? Antwoorden { get; set; }
+        public string CurrentAnswer { get; set; } = "";
+        public bool ShowDelay { get; set; } = false;
+        public int Countdown { get; set; } = 300;
+        public bool PasswordCorrect { get; set; } = false;
+        public bool QuestionsEntered { get; set; } = false;
+    }
+}
